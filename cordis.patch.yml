@@ -1,0 +1,18 @@
+# dsh-web-search-tavily — bundle patch layer
+#
+# Replaces the DeepSeek-backed search provider with a Tavily-backed one while
+# keeping everything else (model-facing web_search tool, fetch, LLM, ...) intact.
+#
+# 1. Point ctx.web's searchProvider at this plugin's provider id (`tavily`).
+#    The base layer sets `searchProvider: deepseek-official`; this later layer
+#    overrides it. The bundled deepseek provider row stays mounted (harmless),
+#    but the seam selects `tavily` for every web_search call.
+# 2. Insert this plugin's row so its `apply` registers the provider.
+
+- id: web
+  config:
+    searchProvider: tavily
+
+- insert:
+    - id: web-search-tavily
+      name: 'dsh-web-search-tavily'

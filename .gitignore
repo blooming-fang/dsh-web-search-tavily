@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+.npm-cache/
+
+# Build artifacts (tsdown) — lib/index.js is hand-maintained and kept
+lib/client.js
+lib/client.js.map
+
+# Packed tarballs
+*.tgz
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
