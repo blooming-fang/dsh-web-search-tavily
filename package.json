@@ -1,5 +1,5 @@
 {
-  "name": "dsh-web-search-tavily",
+  "name": "dsh-tavily-web-search",
   "version": "0.6.2",
   "description": "Tavily-backed WebSearchProvider with a pool-only multi-key settings UI, round-robin search, and official per-key usage inspection.",
   "type": "module",

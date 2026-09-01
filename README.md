@@ -1,4 +1,4 @@
-# dsh-web-search-tavily
+# dsh-tavily-web-search
 
 Tavily 支持的 `WebSearchProvider`，用于 DeepSeek Harness 的 web 能力缝（`ctx.web`）。
 
@@ -41,12 +41,12 @@ Tavily 支持的 `WebSearchProvider`，用于 DeepSeek Harness 的 web 能力缝
 ```bash
 # 在 profile 目录里安装本包（把 <path> 换成实际路径）
 cd "$HOME/.dsh/profiles/web"
-pnpm add file:/path/to/dsh-web-search-tavily
+pnpm add file:/path/to/dsh-tavily-web-search
 ```
 
 > 也可以用 `dsh plugin --profile web install` 完成安装，视你的 dsh 版本而定。
 
-然后把 `dsh-web-search-tavily` 加入 `package.json` 的 `dsh.profile.bundles` 列表（放在 `@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app` 之后）：
+然后把 `dsh-tavily-web-search` 加入 `package.json` 的 `dsh.profile.bundles` 列表（放在 `@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app` 之后）：
 
 ```jsonc
 "dsh": {
@@ -54,7 +54,7 @@ pnpm add file:/path/to/dsh-web-search-tavily
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@deepseek-ai/dsh-web-app",
-      "dsh-web-search-tavily"   // ← 新增
+      "dsh-tavily-web-search"   // ← 新增
     ]
   }
 }
@@ -87,7 +87,7 @@ Web 设置页 → **Tavily 搜索** → **API Key 池**，可以添加、重命�
 ## 文件
 
 ```
-dsh-web-search-tavily/
+dsh-tavily-web-search/
 ├── package.json          # 插件清单 + bundle patch + dsh.client 声明
 ├── cordis.patch.yml      # 把 searchProvider 指向 tavily 并插入插件行
 ├── lib/

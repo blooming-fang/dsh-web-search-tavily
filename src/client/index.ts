@@ -1,5 +1,5 @@
 /**
- * dsh-web-search-tavily, browser half — one feature-owned top-level settings
+ * dsh-tavily-web-search, browser half — one feature-owned top-level settings
  * section (`settings.section`), shown in the settings navigation beside the
  * General / Plugins / Feishu sections. The section binds the
  * `web-search-tavily` settings namespace and renders the API-key secret
@@ -39,7 +39,7 @@ export function apply(ctx: ClientContext): void {
   const t: TranslateNS<'settings.tavily'> = ctx.locale.bind(NS)
   ctx.effect(
     () => ctx.locale.register(NS, { zh, en }),
-    'dsh-web-search-tavily: dictionaries',
+    'dsh-tavily-web-search: dictionaries',
   )
 
   const controller = new TavilyTabController(
@@ -52,7 +52,7 @@ export function apply(ctx: ClientContext): void {
       ctx.remote.$on('credentials/reference-updated', () => {
         void controller.readKeys()
       }),
-    'dsh-web-search-tavily: credential invalidations',
+    'dsh-tavily-web-search: credential invalidations',
   )
 
   ctx.slots.inject('settings.section', () =>

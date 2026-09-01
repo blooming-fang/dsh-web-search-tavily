@@ -10,7 +10,7 @@ const dshInstall = 'E:/soft/nvm/v24.11.0/node_modules/@deepseek-ai/dsh/node_modu
 const load = (base, p) => import(pathToFileURL(join(base, p)).href)
 
 // 1. 加载真实插件（已安装版本）
-const plugin = await load(profileNodeModules, 'dsh-web-search-tavily/lib/index.js')
+const plugin = await load(profileNodeModules, 'dsh-tavily-web-search/lib/index.js')
 console.log('✅ 插件导出:', Object.keys(plugin).join(', '))
 
 // 2. 加载真实凭据服务

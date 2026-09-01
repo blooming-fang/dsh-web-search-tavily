@@ -36,7 +36,7 @@ await new Promise((r) => setTimeout(r, 50))
 
 // Apply the plugin with the real key pool so the usage route exercises the
 // same ref-allowlist the running deployment sees (including disabled keys).
-const plugin = await load(profileNM, 'dsh-web-search-tavily/lib/index.js')
+const plugin = await load(profileNM, 'dsh-tavily-web-search/lib/index.js')
 const keys = [
   { id: 'mth3iduzu7kb77', name: '我的', ref: 'TAVILY_API_KEY_MTH3IDUZU7KB77', enabled: false },
   { id: 'mth3k8gv5ktcne', name: '志明', ref: 'TAVILY_API_KEY_MTH3K8GV5KTCNE', enabled: true },

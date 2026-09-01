@@ -1,4 +1,4 @@
-/** Client type declarations for dsh-web-search-tavily's browser half. */
+/** Client type declarations for dsh-tavily-web-search's browser half. */
 import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { IApiClient } from '@deepseek-ai/dsh-client-connection/client'
 

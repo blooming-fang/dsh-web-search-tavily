@@ -27,7 +27,7 @@ await ctx.plugin(WebServer, { host: '127.0.0.1', port: 0 })
 const ws = ctx.webServer
 await new Promise((r) => setTimeout(r, 50))
 
-const plugin = await load(profileNM, 'dsh-web-search-tavily/lib/index.js')
+const plugin = await load(profileNM, 'dsh-tavily-web-search/lib/index.js')
 plugin.apply(ctx, {})
 await new Promise((r) => setTimeout(r, 300))
 

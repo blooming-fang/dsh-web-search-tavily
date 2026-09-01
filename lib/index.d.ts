@@ -1,4 +1,4 @@
-/** Type declarations for dsh-web-search-tavily. */
+/** Type declarations for dsh-tavily-web-search. */
 import type { Context } from '@deepseek-ai/cordis'
 import type { WebSearchProvider, WebSearchRequest, WebSearchResult } from '@deepseek-ai/dsh-web'
 import type z from '@deepseek-ai/schemastery'

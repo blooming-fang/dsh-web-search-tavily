@@ -1,4 +1,4 @@
-# dsh-web-search-tavily — bundle patch layer
+# dsh-tavily-web-search — bundle patch layer
 #
 # Replaces the DeepSeek-backed search provider with a Tavily-backed one while
 # keeping everything else (model-facing web_search tool, fetch, LLM, ...) intact.
@@ -15,4 +15,4 @@
 
 - insert:
     - id: web-search-tavily
-      name: 'dsh-web-search-tavily'
+      name: 'dsh-tavily-web-search'

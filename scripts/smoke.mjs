@@ -76,7 +76,7 @@ ctx.provide('web', {
 })
 
 // Import our plugin and apply it.
-const plugin = await load(profileNodeModules, 'dsh-web-search-tavily/lib/index.js')
+const plugin = await load(profileNodeModules, 'dsh-tavily-web-search/lib/index.js')
 plugin.apply(ctx, {})
 
 // installSettingsSection registers through ctx.inject(['settings']) which

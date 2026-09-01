@@ -5,7 +5,7 @@ import { defineConfig } from 'tsdown'
 import { transform } from 'lightningcss'
 
 /**
- * dsh-web-search-tavily build: a node ESM plugin entry (`lib/index.js`, which
+ * dsh-tavily-web-search build: a node ESM plugin entry (`lib/index.js`, which
  * is hand-maintained and type-checked separately) plus a browser CJS bundle
  * (`lib/client.js`) wrapped in the `window.__ModuleLoader__.load({ id,
  * factory })` handoff the web shell's module table expects. Browser-side
@@ -21,7 +21,7 @@ import { transform } from 'lightningcss'
  */
 
 /** The id stamped into the ModuleLoader handoff and onto injected style tags. */
-const PLUGIN_ID = 'dsh-web-search-tavily'
+const PLUGIN_ID = 'dsh-tavily-web-search'
 
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'

@@ -1,5 +1,5 @@
 /**
- * dsh-web-search-tavily, node half — the Tavily search provider with a
+ * dsh-tavily-web-search, node half — the Tavily search provider with a
  * settings-backed API key. The `dsh.client` declaration on this package serves
  * the browser half (`lib/client.js`) through the client module system.
  */
