@@ -39,7 +39,7 @@ const clientExternals = [
   'react-dom',
   'react-dom/client',
   '@deepseek-ai/cordis',
-  '@deepseek-ai/dsh-client-runtime/client',
+  '@deepseek-ai/dsh-client-store',
   '@deepseek-ai/dsh-client-ui-primitives',
   '@deepseek-ai/dsh-client-ui-slots',
 ]
@@ -64,7 +64,7 @@ const cssModulesInline: UserConfig['plugins'] = [{
       minify: true,
     })
     const classMap: Record<string, string> = {}
-    for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = exp.name
+    for (const [local, exp] of Object.entries(cssExports ?? {})) classMap[local] = (exp as { name: string }).name
     return [
       `const css = ${JSON.stringify(code.toString())};`,
       `const tagId = ${JSON.stringify(`${PLUGIN_ID}/${basename(fileId)}`)};`,

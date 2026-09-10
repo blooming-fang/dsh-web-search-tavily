@@ -7,13 +7,13 @@
  * UI without hard-coding it or touching the environment.
  */
 
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type { IApiClient } from '@deepseek-ai/dsh-client-connection/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
 import { en, zh, type TavilyKey } from './locales.ts'
-import { TavilyTabController, TAVILY_NS, type TavilySection } from './service.ts'
+import { TavilyTabController, TAVILY_NS, type TavilyCredentialsRemote, type TavilySection } from './service.ts'
 import { TavilySettingsSection } from './TavilyTab.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -27,7 +27,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'settings.tavily'
 
 /** Required services: the slot registry, locale, settings scope, and the wire face. */
-export const inject = ['slots', 'locale', 'connection', 'settingsScope', 'remote']
+export const inject = ['slots', 'locale', 'connection', 'settingsScope', 'remote', 'remote.credentials']
 
 /**
  * Client plugin body: register the section dictionaries, bind the settings
@@ -35,23 +35,31 @@ export const inject = ['slots', 'locale', 'connection', 'settingsScope', 'remote
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
-  const api: IApiClient = ctx.get('connection').api
   const t: TranslateNS<'settings.tavily'> = ctx.locale.bind(NS)
   ctx.effect(
     () => ctx.locale.register(NS, { zh, en }),
     'dsh-tavily-web-search: dictionaries',
   )
 
+  // The remote client's namespaces ride a Typert module augmentation that some
+  // TypeScript builds hide from the extending client type; pin the face here.
+  const credentials = (ctx.remote as unknown as { credentials: TavilyCredentialsRemote }).credentials
   const controller = new TavilyTabController(
     ctx.settingsScope.bind<TavilySection>({ namespace: TAVILY_NS }),
-    api,
+    credentials,
   )
 
   ctx.effect(
     () =>
-      ctx.remote.$on('credentials/reference-updated', () => {
-        void controller.readKeys()
-      }),
+      // The forwarded event rides the same Typert augmentation that some builds
+      // hide from the client type; pin the wire call structurally (the official
+      // clients subscribe to the same forwarded event).
+      (ctx.remote.$on as unknown as (event: string, listener: () => void) => () => void)(
+        'credentials/reference-updated',
+        () => {
+          void controller.readKeys()
+        },
+      ),
     'dsh-tavily-web-search: credential invalidations',
   )
 

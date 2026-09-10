@@ -13,11 +13,22 @@
  * options for the next search.
  */
 
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type { IApiClient } from '@deepseek-ai/dsh-client-connection/client'
-import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+// Type-only merges: the credentials remote namespace (dsh-api-settings-controller/remote)
+// and the `credentials/reference-updated` remote event (dsh-credentials).
+import type {} from '@deepseek-ai/dsh-credentials'
+import type {} from '@deepseek-ai/dsh-api-settings-controller/remote'
+import type { CredentialInfo } from '@deepseek-ai/dsh-credentials'
+import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
+
+/** The `credentials` remote namespace the section reads and writes. */
+export interface TavilyCredentialsRemote {
+  describe(refs: string[]): Promise<RemoteResult<Record<string, CredentialInfo>>>
+  set(ref: string, value: string): Promise<RemoteResult<void>>
+  unset(ref: string): Promise<RemoteResult<void>>
+}
 
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'settings.tavily'
@@ -314,14 +325,14 @@ export interface TavilySection {
  */
 export class TavilyTabController {
   readonly scope: SettingsScope<TavilySection>
-  readonly api: IApiClient
+  readonly remote: TavilyCredentialsRemote
   readonly form: TavilyCardForm
   readonly store: SnapshotStore<TavilyTabState>
   keyStates = new Map<string, TavilyKeyState>()
 
-  constructor(scope: SettingsScope<TavilySection>, api: IApiClient) {
+  constructor(scope: SettingsScope<TavilySection>, remote: TavilyCredentialsRemote) {
     this.scope = scope
-    this.api = api
+    this.remote = remote
     this.form = new TavilyCardForm(
       scope,
       [textField('endpoint'), textField('searchDepth'), numberField('maxResults')],
@@ -382,15 +393,16 @@ export class TavilyTabController {
       this.store.set(this.projection())
       return
     }
-    let response
+    let response: RemoteResult<Record<string, CredentialInfo>>
     try {
-      response = await this.api.credentials.describe({ refs: rows.map((row) => row.ref) })
+      response = await this.remote.describe(rows.map((row) => row.ref))
     } catch { return }
-    if (!response.result.ok) return
+    if (!response.ok) return
+    const views = response.value
     const next = new Map<string, TavilyKeyState>()
     for (const row of rows) {
       const previous = this.keyStates.get(row.id)
-      const view = response.result.value.credentials[row.ref]
+      const view = views[row.ref]
       next.set(row.id, {
         id: row.id,
         name: row.name,
@@ -413,8 +425,8 @@ export class TavilyTabController {
     if (cleanName === '' || cleanValue === '') return false
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
     const ref = `TAVILY_API_KEY_${id.toUpperCase()}`
-    const stored = await this.api.credentials.set({ ref, value: cleanValue })
-    if (!stored.result.ok) return false
+    const stored = await this.remote.set(ref, cleanValue)
+    if (!stored.ok) return false
     await this.storeKeys([...this.keys(), { id, name: cleanName, ref, enabled: true }])
     return true
   }
@@ -430,16 +442,16 @@ export class TavilyTabController {
   async replaceKey(id: string, value: string) {
     const row = this.keys().find((item) => item.id === id)
     if (row === undefined || value.trim() === '') return false
-    const response = await this.api.credentials.set({ ref: row.ref, value: value.trim() })
+    const response = await this.remote.set(row.ref, value.trim())
     await this.readKeys()
-    return response.result.ok
+    return response.ok
   }
 
   async removeKey(id: string) {
     const row = this.keys().find((item) => item.id === id)
     if (row === undefined) return false
-    const response = await this.api.credentials.unset({ ref: row.ref })
-    if (!response.result.ok) return false
+    const response = await this.remote.unset(row.ref)
+    if (!response.ok) return false
     await this.storeKeys(this.keys().filter((item) => item.id !== id))
     return true
   }
