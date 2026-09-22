@@ -1,57 +1,65 @@
 /**
- * 真实搜索测试：加载已安装到 profile 的插件，通过真实凭据服务解析
- * TAVILY_API_KEY，然后调用 Tavily 搜索接口做一次真实搜索。
+ * Real-environment search check: resolve a Tavily credential through the real
+ * `dsh-credentials-local` service and run one real search plus one real usage
+ * query through this plugin's provider.
+ *
+ * Usage: node ./scripts/test-search.mjs [ref]
+ *   ref defaults to TAVILY_API_KEY.
  */
 import { pathToFileURL } from 'node:url'
 import { join } from 'node:path'
 
-const profileNodeModules = 'C:/Users/tlzn_user/.dsh/profiles/web/node_modules'
+const pluginRoot = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
+const nm = join(pluginRoot, 'node_modules')
 const dshInstall = 'E:/soft/nvm/v24.11.0/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai'
 const load = (base, p) => import(pathToFileURL(join(base, p)).href)
 
-// 1. 加载真实插件（已安装版本）
-const plugin = await load(profileNodeModules, 'dsh-tavily-web-search/lib/index.js')
-console.log('✅ 插件导出:', Object.keys(plugin).join(', '))
-
-// 2. 加载真实凭据服务
+const ref = process.argv[2] ?? 'TAVILY_API_KEY'
+const plugin = await import(pathToFileURL(join(pluginRoot, 'lib/index.js')).href)
+const { Context } = await load(nm, '@deepseek-ai/cordis/lib/index.js')
 const { default: CredentialsLocal } = await load(dshInstall, 'dsh-credentials-local/lib/index.js')
-const { Context } = await load(dshInstall, 'cordis/lib/index.js')
+
 const ctx = new Context()
-
-// 实例化凭据服务（真实读取 $DSH_HOME/.credentials.yaml）
-const credentials = new CredentialsLocal(ctx, {})
-console.log('✅ 凭据服务已挂载')
-
-// 3. 通过凭据服务解析 TAVILY_API_KEY
-const resolved = await credentials.resolve('TAVILY_API_KEY')
-if (!resolved) {
-  console.log('❌ TAVILY_API_KEY 未配置')
+await ctx.plugin(CredentialsLocal, { dshHome: process.env.DSH_HOME })
+const resolved = await ctx.credentials.resolve(ref)
+if (resolved === undefined) {
+  console.log(`FAIL ${ref} is not configured`)
   process.exit(1)
 }
-console.log(`✅ TAVILY_API_KEY 已解析 (source=${resolved.source}, value=${resolved.value.slice(0, 12)}...)`)
+console.log(`ok   resolved ${ref} (source=${resolved.source}, length=${String(resolved.value.length)})`)
 
-// 4. 用插件的 TavilySearchProvider 做真实搜索
 const provider = new plugin.TavilySearchProvider(() => ({
-  resolveApiKey: async () => (await credentials.resolve('TAVILY_API_KEY'))?.value,
-  apiKeyEnv: 'TAVILY_API_KEY',
+  resolveApiKey: async () => (await ctx.credentials.resolve(ref))?.value,
   endpoint: 'https://api.tavily.com/search',
   searchDepth: 'basic',
   maxResults: 3,
   timeoutMs: 30000,
 }))
+console.log('ok   provider available:', provider.available())
 
-console.log('\n=== 调用 provider.search() ===')
-const controller = new AbortController()
+let failures = 0
 try {
-  const result = await provider.search({ query: 'DeepSeek V4 发布 最新消息' }, controller.signal)
-  console.log('✅ 搜索成功!')
-  console.log('结果数:', result.sources.length)
-  for (const s of result.sources.slice(0, 5)) {
-    console.log(`  - [${s.title?.slice(0, 50) ?? '无标题'}]`)
-    console.log(`    ${s.url}`)
-    if (s.snippet) console.log(`    ${s.snippet.slice(0, 90)}...`)
-  }
-} catch (err) {
-  console.log('❌ 搜索失败:', String(err).slice(0, 300))
-  process.exit(1)
+  const result = await provider.search({ query: 'DeepSeek Harness 最新版本' }, new AbortController().signal)
+  console.log(`ok   search returned ${String(result.sources.length)} sources`)
+  for (const source of result.sources.slice(0, 3)) console.log(`       - ${source.title ?? '(no title)'} ${source.url}`)
+  if (result.sources.length === 0) failures += 1
+} catch (error) {
+  console.log('FAIL search:', String(error).slice(0, 300))
+  failures += 1
 }
+
+try {
+  const response = await fetch('https://api.tavily.com/usage', {
+    headers: { Accept: 'application/json', Authorization: `Bearer ${resolved.value}` },
+  })
+  const body = await response.json()
+  console.log(`ok   usage HTTP ${String(response.status)} plan=${String(body?.account?.current_plan ?? '?')} usage=${String(body?.account?.plan_usage ?? body?.key?.usage ?? '?')}`)
+  if (!response.ok) failures += 1
+} catch (error) {
+  console.log('FAIL usage:', String(error).slice(0, 300))
+  failures += 1
+}
+
+await ctx.stop?.().catch(() => {})
+console.log(failures === 0 ? '\nREAL ENV OK' : `\nREAL ENV FAILED (${String(failures)})`)
+process.exit(failures === 0 ? 0 : 1)

@@ -1,35 +1,31 @@
 /** Client type declarations for dsh-tavily-web-search's browser half. */
-import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import type { IApiClient } from '@deepseek-ai/dsh-client-connection/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type {
+  SettingsFieldState,
+  SettingsFormActions,
+  SettingsFormScope,
+  SettingsFormShell,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 
 export declare const NS: 'settings.tavily'
 export declare const TAVILY_NS: 'web-search-tavily'
 
-export interface FieldState { text: string; overridden: boolean; invalid: boolean }
 export interface TavilyUsage {
   key?: { usage?: number; limit?: number; search_usage?: number }
   account?: { current_plan?: string; plan_usage?: number; plan_limit?: number; search_usage?: number }
 }
 export interface TavilyKeyConfig { id: string; name: string; ref: string; enabled?: boolean }
-export interface TavilyKeyState extends TavilyKeyConfig {
+export interface TavilyKeyState {
+  id: string
+  name: string
+  ref: string
   enabled: boolean
   configured: boolean
   writable: boolean
   loading: boolean
   usage?: TavilyUsage
   error?: string
-}
-export interface TavilyTabState {
-  available: boolean
-  writable: boolean
-  dirty: boolean
-  invalid: boolean
-  saving: boolean
-  failed: boolean
-  endpoint: FieldState
-  searchDepth: FieldState
-  maxResults: FieldState
-  keys: TavilyKeyState[]
 }
 export interface TavilySection {
   keys?: TavilyKeyConfig[]
@@ -38,14 +34,29 @@ export interface TavilySection {
   maxResults?: number
   timeoutMs?: number
 }
+export interface TavilyTabState extends SettingsFormShell {
+  endpoint: SettingsFieldState
+  searchDepth: SettingsFieldState
+  maxResults: SettingsFieldState
+  keys: TavilyKeyState[]
+}
+export interface TavilyTabActions extends SettingsFormActions {
+  addKey: (name: string, value: string) => Promise<boolean>
+  renameKey: (id: string, name: string) => Promise<boolean>
+  replaceKey: (id: string, value: string) => Promise<boolean>
+  removeKey: (id: string) => Promise<boolean>
+  toggleKey: (id: string, enabled: boolean) => Promise<boolean>
+  refreshUsage: (id: string) => Promise<boolean>
+  refreshAllUsage: () => Promise<void>
+}
 export declare class TavilyTabController {
-  readonly scope: SettingsScope<TavilySection>
-  readonly api: IApiClient
+  readonly scope: SettingsFormScope<TavilySection>
   readonly store: SnapshotStore<TavilyTabState>
-  constructor(scope: SettingsScope<TavilySection>, api: IApiClient)
+  constructor(scope: SettingsFormScope<TavilySection>, remote: unknown)
   projection(): TavilyTabState
   readKeys(): Promise<void>
-  inject(): Record<string, unknown>
+  dispose(): void
+  inject(): TavilyTabActions & { hooks: { tavilyTab: SnapshotStore<TavilyTabState> } }
 }
 export declare const inject: string[]
-export declare function apply(ctx: import('@deepseek-ai/dsh-client-runtime/client').ClientContext): void
+export declare function apply(ctx: ClientContext): void

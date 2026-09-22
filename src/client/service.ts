@@ -2,26 +2,34 @@
  * Tavily settings section, browser half — one feature-owned top-level entry in
  * the settings navigation (`settings.section`).
  *
- * The section binds the `web-search-tavily` settings namespace and manages a
- * pool of write-only credentials. Key values never ride a response; settings
- * contain only each key's display name, generated credential reference and
- * enabled state.
+ * Since DSH 0.1.7 a plugin's configuration lives in its own `Config` schema,
+ * served to the browser by the settings domain: the section binds the shared
+ * configuration form of the plugin's profile entry (`ctx.configForms`) instead
+ * of registering a namespace of its own. Edits are staged and written as
+ * revision-fenced path mutations, so a save is one atomic document write.
  *
- * The tab also surfaces the endpoint / search depth / result-count options
- * the provider serves, staged like the shipped plugin cards: a save writes
- * the section, and the Host's live settings section re-resolves the provider
- * options for the next search.
+ * The section manages a pool of write-only credentials. Key values never ride a
+ * response; the section holds only each key's display name, generated credential
+ * reference and enabled state.
  */
 
-// Type-only merges: the credentials remote namespace (dsh-api-settings-controller/remote)
-// and the `credentials/reference-updated` remote event (dsh-credentials).
+// Type-only merges: the credentials remote namespace (dsh-api-settings-controller/remote),
+// the `credentials/reference-updated` forwarded event (dsh-credentials), and the
+// Remote namespaces themselves (dsh-api-remotes/client).
 import type {} from '@deepseek-ai/dsh-credentials'
+import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-api-settings-controller/remote'
 import type { CredentialInfo } from '@deepseek-ai/dsh-credentials'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
-import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import {
+  SettingsFormModel,
+  settingsNumberField,
+  settingsTextField,
+  type SettingsFieldState,
+  type SettingsFormScope,
+  type SettingsFormShell,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 
 /** The `credentials` remote namespace the section reads and writes. */
 export interface TavilyCredentialsRemote {
@@ -33,14 +41,16 @@ export interface TavilyCredentialsRemote {
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'settings.tavily'
 
-/** Settings namespace the Host plugin registers; spelled here to avoid a client→host dependency. */
+/** Profile entry id (the plugin's settings namespace) this section edits. */
 export const TAVILY_NS = 'web-search-tavily'
 
-/** One control's draft text and whether a save would leave an override. */
-export interface FieldState {
-  text: string
-  overridden: boolean
-  invalid: boolean
+/** The settings section shape (mirrors the Host Config schema). */
+export interface TavilySection {
+  keys?: TavilyKeyConfig[]
+  endpoint?: string
+  searchDepth?: string
+  maxResults?: number
+  timeoutMs?: number
 }
 
 export interface TavilyUsage {
@@ -63,6 +73,13 @@ export interface TavilyUsage {
   }
 }
 
+export interface TavilyKeyConfig {
+  id: string
+  name: string
+  ref: string
+  enabled?: boolean
+}
+
 export interface TavilyKeyState {
   id: string
   name: string
@@ -75,274 +92,46 @@ export interface TavilyKeyState {
   error?: string
 }
 
-/** The tab's full snapshot: shell facts plus every field. */
-export interface TavilyTabState {
-  available: boolean
-  writable: boolean
-  dirty: boolean
-  invalid: boolean
-  saving: boolean
-  failed: boolean
-  endpoint: FieldState
-  searchDepth: FieldState
-  maxResults: FieldState
+/** The section's full snapshot: the shared form shell plus every control. */
+export interface TavilyTabState extends SettingsFormShell {
+  endpoint: SettingsFieldState
+  searchDepth: SettingsFieldState
+  maxResults: SettingsFieldState
   keys: TavilyKeyState[]
 }
 
-export interface TavilyKeyConfig {
-  id: string
-  name: string
-  ref: string
-  enabled?: boolean
-}
-
-/** A whole-number field. Empty draft clears; anything else must parse. */
-function numberField(field: string) {
-  return {
-    field,
-    format: (value: unknown) => (typeof value === 'number' ? String(value) : ''),
-    parse: (text: string): { kind: 'clear' } | { kind: 'set'; value: number } | undefined => {
-      const trimmed = text.trim()
-      if (trimmed === '') return { kind: 'clear' }
-      const parsed = Number(trimmed)
-      return Number.isFinite(parsed) ? { kind: 'set', value: parsed } : undefined
-    },
-  }
-}
-
-/** A free-text field. Empty draft clears. */
-function textField(field: string) {
-  return {
-    field,
-    format: (value: unknown) => (typeof value === 'string' ? value : ''),
-    parse: (text: string): { kind: 'clear' } | { kind: 'set'; value: string } => {
-      const trimmed = text.trim()
-      return trimmed === '' ? { kind: 'clear' } : { kind: 'set', value: trimmed }
-    },
-  }
-}
-
-type FieldSpec =
-  | ReturnType<typeof textField>
-  | ReturnType<typeof numberField>
-
 /**
- * Stages the tab's edits over one settings namespace and writes them on save.
- * The API key is a write-only control addressed through the credentials
- * domain, exactly like the shipped web-search card.
- */
-class TavilyCardForm {
-  readonly scope: SettingsScope<TavilySection>
-  readonly specs: Map<string, FieldSpec>
-  readonly secretSpecs: Map<string, { write: (value: string) => Promise<boolean> }>
-  readonly staged = new Map<string, { text: string; clear: boolean }>()
-  readonly listeners = new Set<() => void>()
-  saving = false
-  failed = false
-
-  constructor(
-    scope: SettingsScope<TavilySection>,
-    specs: FieldSpec[],
-    secrets: { field: string; write: (value: string) => Promise<boolean> }[],
-  ) {
-    this.scope = scope
-    this.specs = new Map(specs.map((spec) => [spec.field, spec]))
-    this.secretSpecs = new Map(secrets.map((spec) => [spec.field, spec]))
-    scope.subscribe(() => {
-      this.publish()
-    })
-  }
-
-  bind(project: () => TavilyTabState): SnapshotStore<TavilyTabState> {
-    const store = createSnapshotStore(project())
-    this.listeners.add(() => {
-      store.set(project())
-    })
-    return store
-  }
-
-  shell() {
-    const snapshot = this.scope.getSnapshot()
-    const plan = this.plan()
-    return {
-      available: snapshot.status === 'ready',
-      writable: snapshot.writable,
-      dirty: plan.length > 0,
-      invalid: plan.some((item) => item.run === undefined),
-      saving: this.saving,
-      failed: this.failed,
-    }
-  }
-
-  field(field: string): FieldState {
-    const staged = this.staged.get(field)
-    if (this.secretSpecs.has(field)) {
-      return { text: staged?.text ?? '', overridden: false, invalid: false }
-    }
-    const spec = this.spec(field)
-    if (staged === undefined) {
-      return {
-        text: spec.format(this.sectionValue(field)),
-        overridden: this.stored(field),
-        invalid: false,
-      }
-    }
-    const write = staged.clear ? { kind: 'clear' as const } : spec.parse(staged.text)
-    return {
-      text: staged.text,
-      overridden: write?.kind === 'set',
-      invalid: write === undefined,
-    }
-  }
-
-  actions() {
-    return {
-      edit: (field: string, text: string) => {
-        this.stage(field, { text, clear: false })
-      },
-      resetField: (field: string) => {
-        this.stage(field, {
-          text: this.spec(field).format(this.baseValue(field)),
-          clear: true,
-        })
-      },
-      save: () => {
-        void this.save()
-      },
-      discard: () => {
-        if (this.staged.size === 0 && !this.failed) return
-        this.staged.clear()
-        this.failed = false
-        this.publish()
-      },
-    }
-  }
-
-  async save() {
-    const plan = this.plan()
-    const writes = plan.flatMap((item) => (item.run === undefined ? [] : [item.run]))
-    if (plan.length === 0 || this.saving || writes.length !== plan.length) return
-    this.saving = true
-    this.failed = false
-    this.publish()
-    let landed = true
-    for (const write of writes) landed = (await write()) && landed
-    if (landed) this.staged.clear()
-    this.saving = false
-    this.failed = !landed
-    this.publish()
-  }
-
-  plan(): { field: string; run?: () => Promise<boolean> }[] {
-    const plan: { field: string; run?: () => Promise<boolean> }[] = []
-    for (const [field, staged] of this.staged) {
-      const secret = this.secretSpecs.get(field)
-      if (secret !== undefined) {
-        const value = staged.text.trim()
-        if (value !== '') {
-          plan.push({ field, run: () => secret.write(value) })
-        }
-        continue
-      }
-      const spec = this.spec(field)
-      if (staged.clear) {
-        if (this.stored(field)) {
-          plan.push({ field, run: () => this.clear(field) })
-        }
-        continue
-      }
-      if (staged.text === spec.format(this.sectionValue(field))) continue
-      const write = spec.parse(staged.text)
-      if (write === undefined) {
-        plan.push({ field, run: undefined })
-      } else if (write.kind === 'clear') {
-        plan.push({ field, run: () => this.clear(field) })
-      } else {
-        plan.push({ field, run: () => this.store(field, write.value) })
-      }
-    }
-    return plan
-  }
-
-  async clear(field: string) {
-    await this.scope.unset(field)
-    return !this.stored(field)
-  }
-
-  async store(field: string, value: unknown) {
-    await this.scope.set(field, value)
-    const user = this.userLayer()
-    return user !== undefined && (user as Record<string, unknown>)[field] === value
-  }
-
-  stage(field: string, edit: { text: string; clear: boolean }) {
-    this.staged.set(field, edit)
-    this.failed = false
-    this.publish()
-  }
-
-  spec(field: string): FieldSpec {
-    const spec = this.specs.get(field)
-    if (spec === undefined) throw new Error(`Tavily tab has no field ${field}`)
-    return spec
-  }
-
-  sectionValue(field: string) {
-    const value = this.scope.getSnapshot().value
-    return value !== undefined ? (value as Record<string, unknown>)[field] : undefined
-  }
-
-  baseValue(field: string) {
-    return (this.scope.getSnapshot().base as TavilySection | undefined)?.[field as keyof TavilySection]
-  }
-
-  userLayer() {
-    return this.scope.getSnapshot().user as TavilySection | undefined
-  }
-
-  stored(field: string) {
-    const user = this.userLayer()
-    return user !== undefined && Object.hasOwn(user, field)
-  }
-
-  publish() {
-    for (const listener of this.listeners) listener()
-  }
-}
-
-/** The settings section shape (mirrors the Host schema). */
-export interface TavilySection {
-  keys?: TavilyKeyConfig[]
-  endpoint?: string
-  searchDepth?: string
-  maxResults?: number
-  timeoutMs?: number
-}
-
-/**
- * The tab's controller: binds the settings scope, bridges the credentials
- * domain, and exposes the staged form's snapshot.
+ * The section's controller: binds the shared configuration form of the
+ * `web-search-tavily` profile entry, bridges the credentials domain, and
+ * exposes the staged form's snapshot plus the key-pool actions.
  */
 export class TavilyTabController {
-  readonly scope: SettingsScope<TavilySection>
+  readonly scope: SettingsFormScope<TavilySection>
   readonly remote: TavilyCredentialsRemote
-  readonly form: TavilyCardForm
+  readonly form: SettingsFormModel<TavilySection>
   readonly store: SnapshotStore<TavilyTabState>
   keyStates = new Map<string, TavilyKeyState>()
+  private readonly unsubscribe: () => void
 
-  constructor(scope: SettingsScope<TavilySection>, remote: TavilyCredentialsRemote) {
+  constructor(scope: SettingsFormScope<TavilySection>, remote: TavilyCredentialsRemote) {
     this.scope = scope
     this.remote = remote
-    this.form = new TavilyCardForm(
-      scope,
-      [textField('endpoint'), textField('searchDepth'), numberField('maxResults')],
-      [],
-    )
+    this.form = new SettingsFormModel(scope, [
+      settingsTextField('endpoint'),
+      settingsTextField('searchDepth'),
+      settingsNumberField('maxResults'),
+    ])
     this.store = this.form.bind(() => this.projection())
-    scope.subscribe(() => {
+    this.unsubscribe = scope.subscribe(() => {
       void this.readKeys()
     })
     void this.readKeys()
+  }
+
+  /** Release the form and scope subscriptions. */
+  dispose() {
+    this.unsubscribe()
+    this.form.dispose()
   }
 
   projection(): TavilyTabState {
@@ -361,7 +150,7 @@ export class TavilyTabController {
     }
   }
 
-  /** The face the tab's slot registration injects. */
+  /** The face the section's slot registration injects. */
   inject() {
     return {
       hooks: { tavilyTab: this.store },
@@ -381,8 +170,9 @@ export class TavilyTabController {
     return Array.isArray(rows) ? rows : []
   }
 
+  /** Replace the whole public key pool in one revision-fenced write. */
   async storeKeys(keys: TavilyKeyConfig[]) {
-    await this.scope.set('keys', keys)
+    await this.scope.mutate([{ op: 'set', path: ['keys'], value: keys }])
     await this.readKeys()
   }
 

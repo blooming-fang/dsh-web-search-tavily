@@ -9,9 +9,10 @@
  */
 
 import { useState } from 'react'
-import { IconChevronDownOutline14, IconGlobeOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChevronDownOutlineRegular, IconGlobeOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import type { FieldState, TavilyKeyState, TavilyTabState } from './service.ts'
+import type { SettingsFieldState } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { TavilyKeyState, TavilyTabState } from './service.ts'
 import css from './TavilyTab.module.css'
 
 /** Form actions the controller injects beside the hooks seat. */
@@ -209,7 +210,7 @@ export function TavilyTab(props: {
           setOpen(!open)
         }}
       >
-        <IconGlobeOutline14 className={css.icon} />
+        <IconGlobeOutlineRegular size={14} className={css.icon} />
         <span className={css.headText}>
           <span className={css.name}>{t('name')}</span>
           <span className={css.description}>{t('description')}</span>
@@ -217,7 +218,8 @@ export function TavilyTab(props: {
         {state.dirty ? (
           <span className={css.pending}>{t('unsaved')}</span>
         ) : null}
-        <IconChevronDownOutline14
+        <IconChevronDownOutlineRegular
+          size={14}
           className={open ? `${css.chevron} ${css.chevronOpen}` : css.chevron}
         />
       </button>
@@ -320,4 +322,4 @@ export function TavilyTab(props: {
 
 export const TavilySettingsSection = TavilyTab
 
-export type { FieldState, TavilyTabState }
+export type { SettingsFieldState as FieldState, TavilyTabState }
